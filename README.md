@@ -33,9 +33,16 @@ Cette application propose une implémentation fidèle de la **méthode des Nuée
 
 ### 1. Créer un environnement virtuel (optionnel)
 
-Windows :
 ```bash
 python -m venv venv
+```
+
+---
+
+### 2. Activer l'environnement virtuel
+
+Windows :
+```bash
 venv\Scripts\activate
 ```
 
@@ -48,7 +55,7 @@ source venv/bin/activate
 
 ---
 
-### 2. Installer les dépendances
+### 3. Installer les dépendances
 
 ```bash
 pip install -r requirements.txt
@@ -56,7 +63,7 @@ pip install -r requirements.txt
 
 ---
 
-### 3. Lancer l'application Streamlit
+### 4. Lancer l'application Streamlit
 
 ```bash
 streamlit run streamlit_app/app.py
