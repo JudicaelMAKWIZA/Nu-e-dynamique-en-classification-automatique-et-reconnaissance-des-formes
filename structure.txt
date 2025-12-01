@@ -1,0 +1,37 @@
+Structure du dossier pour le volume Espace travail
+Le num‚ro de s‚rie du volume est D40A-ED5A
+E:.
+³   .gitignore
+³   pyproject.toml
+³   README.md
+³   setup.cfg
+³   structure.txt
+³   
+ÃÄÄÄnuees
+³   ³   distances.py
+³   ³   nuees.py
+³   ³   r_function.py
+³   ³   __init__.py
+³   ³   
+³   ÀÄÄÄ__pycache__
+³           distances.cpython-310.pyc
+³           nuees.cpython-310.pyc
+³           r_function.cpython-310.pyc
+³           __init__.cpython-310.pyc
+³           
+ÃÄÄÄnuees_dynamiques.egg-info
+³       dependency_links.txt
+³       PKG-INFO
+³       requires.txt
+³       SOURCES.txt
+³       top_level.txt
+³       
+ÃÄÄÄstreamlit_app
+³       app.py
+³       
+ÃÄÄÄtests
+³       test_basic.py
+³       
+ÀÄÄÄtools
+        generate_datasets.py
+        
