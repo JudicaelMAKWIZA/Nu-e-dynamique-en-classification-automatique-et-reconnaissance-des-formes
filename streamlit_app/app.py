@@ -154,7 +154,7 @@ if file is not None:
         st.subheader("Étalons")
         L = model.L_indices_
         for i, idx_list in enumerate(L):
-            coords = [tuple(X[j]) for j in idx_list]
+            coords = [tuple(int(c) for c in X[j]) for j in idx_list]
             st.write(f"Classe {i} → indices {idx_list} → coords {coords}")
 
         # ---------- VISUALISATION ----------
