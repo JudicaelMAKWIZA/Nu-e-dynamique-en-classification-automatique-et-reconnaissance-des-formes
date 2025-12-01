@@ -4,7 +4,7 @@ Implémentation de la méthode des Nuées Dynamiques
 Cette application propose une implémentation fidèle de la **méthode des Nuées Dynamiques**, introduite par **Edmond Diday en 1971**.
 
 ## 📁 Structure du projet
-
+```
 .
 ├── nuees/ # Package Python : logique des Nuées Dynamiques
 │ ├── distances.py
@@ -26,7 +26,7 @@ Cette application propose une implémentation fidèle de la **méthode des Nuée
 ├── requirements.txt
 ├── README.md
 └── .gitignore
-
+```
 ---
 
 ## Installation locale
