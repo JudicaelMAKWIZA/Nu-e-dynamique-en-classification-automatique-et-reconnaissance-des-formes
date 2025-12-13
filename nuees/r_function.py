@@ -1,28 +1,40 @@
 import numpy as np
 
-
 def D_point_to_set_idx(x_vec, X, set_indices, distance_fn, distance_kwargs=None):
     """
     Distance d'un vecteur x_vec au noyau (liste d'indices) set_indices.
-    SELON DIDAY (Définition 5) : SOMME des distances entre x et chaque élément du noyau.
+    SELON DIDAY (Définition 5) : On prend la SOMME des distances entre x
+    et chaque élément du noyau E_i.
     """
-    if not set_indices:
-        return 1e9
+    #if distance_kwargs is None:
+    #    distance_kwargs = {}
 
-    total = 0.0
+    if not set_indices:
+        return 1e9  # valeur neutre élevée si noyau vide
+
+    # --- CORRECTION : Utiliser la SOMME (total) au lieu du MINIMUM (dmin) ---
+    total_distance = 0.0
     for idx in set_indices:
         y = X[int(idx)]
         if distance_kwargs:
-            total += distance_fn(x_vec, y, **distance_kwargs)
+            d = distance_fn(x_vec, y, **distance_kwargs)
         else:
-            total += distance_fn(x_vec, y)
-    return float(total)
+            d = distance_fn(x_vec, y)
+        total_distance += d
+        
+    return float(total_distance) # Retourne la SOMME
 
 
 def D_point_to_class_idx(x_vec, X, class_indices, distance_fn, distance_kwargs=None):
     """
-    Distance moyenne de x_vec à tous les éléments de la classe.
+    Distance moyenne de x_vec à tous les éléments de la classe (class_indices).
+    (Utile pour l'étape de mise à jour R(x, i, L))
     """
+    # [Le reste de cette fonction reste correct, car tu calcules déjà la somme / taille]
+    # ...
+    #if distance_kwargs is None:
+     #   distance_kwargs = {}
+
     if not class_indices:
         return 1e9
 
@@ -36,31 +48,7 @@ def D_point_to_class_idx(x_vec, X, class_indices, distance_fn, distance_kwargs=N
     return float(total / len(class_indices))
 
 
-# 🔵 AJOUT : distance générique à un noyau
-def D_point_to_kernel(x, kernel, X, distance_fn):
-    ktype = kernel["type"]
-
-    if ktype == "discrete":
-        return D_point_to_set_idx(x, X, kernel["indices"], distance_fn)
-
-    elif ktype == "centroid":
-        return distance_fn(x, kernel["vector"])
-
-    elif ktype == "gaussian":
-        diff = x - kernel["mean"]
-        inv_cov = np.linalg.pinv(kernel["cov"])
-        return float(diff.T @ inv_cov @ diff)
-
-    elif ktype == "factorial":
-        v = kernel["axis"]
-        g = kernel["origin"]
-        return float(np.linalg.norm(np.cross(x - g, v)))
-
-    else:
-        raise ValueError("Type de noyau inconnu")
-
-
-def R_idx(x_vec, i, L, classes_dict, X, distance_fn, distance_kwargs=None):
+def R_idx(x_vec, i, L_indices, classes_dict, X, distance_fn, distance_kwargs=None):
     """
     Calcul de R(x,i,L) selon Diday (Exemple 1):
         R(x,i,L) = D(x, E_i) * D(x, C_i) / ( sum_j D(x, E_j) )^2
@@ -68,20 +56,34 @@ def R_idx(x_vec, i, L, classes_dict, X, distance_fn, distance_kwargs=None):
     if distance_kwargs is None:
         distance_kwargs = {}
 
-    de = D_point_to_kernel(x_vec, L[i], X, distance_fn)
-    dc = D_point_to_class_idx(
-        x_vec, X, classes_dict.get(i, []),
-        distance_fn, distance_kwargs
-    )
+    Ei_idx = L_indices[i]
+    # Note : Ci_idx n'est pas utilisé directement dans l'Exemple 1 de R(x,i,L)
+    # pour le calcul de l'affectation, c'est l'étape 3 (maj des noyaux) qui utilise
+    # R(x, i, L) ~ D(x, C_i), mais tu utilises la forme générale D(x, Ei) dans l'affectation.
+    # Dans le contexte de l'Exemple 1 que tu as choisi pour R_idx, la dépendance
+    # à self.classes_ dans cette fonction est correcte.
 
+    # D(x, E_i) : distance à l'ensemble des étalons (SOMME)
+    de = D_point_to_set_idx(x_vec, X, Ei_idx, distance_fn, distance_kwargs)
+    
+    # La fonction D_point_to_class_idx est utilisée ici pour le terme D(x, C_i) 
+    # dans le numérateur R = D(x, E_i) * D(x, C_i) / [...]
+    Ci_idx = classes_dict.get(i, [])
+    # D(x, C_i) : distance moyenne à la classe (MOYENNE)
+    dc = D_point_to_class_idx(x_vec, X, Ci_idx, distance_fn, distance_kwargs)
+    
+    # ... (le reste du code pour R_idx est laissé tel quel)
     if dc >= 1e9:
+        # si la classe est vide, on neutralise l'impact de D(x, C_i)
         dc = 1.0
 
     numerator = de * dc
 
-    denom_sum = 0.0
-    for Ej in L:
-        denom_sum += D_point_to_kernel(x_vec, Ej, X, distance_fn)
+    sum_dist = 0.0
+    for Ej in L_indices:
+        # La somme des distances D(x, E_j) pour le dénominateur
+        sum_dist += D_point_to_set_idx(x_vec, X, Ej, distance_fn, distance_kwargs)
 
-    denom = denom_sum ** 2 if denom_sum != 0 else 1e-12
+    denom = (sum_dist ** 2) if sum_dist != 0 else 1e-12
+
     return float(numerator / denom)

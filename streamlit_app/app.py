@@ -97,19 +97,6 @@ distance_name = st.selectbox(
     ["euclidienne", "sebestyen", "chebychev", "chi2"]
 )
 
-# ----------------------------------------------------------------------
-# 🔵 AJOUT : choix du type de noyau
-# ----------------------------------------------------------------------
-kernel_type = st.selectbox(
-    "Type de noyau",
-    [
-        "discrete",     # ensemble d’individus (cas historique)
-        "centroïde",     # centre de gravité (k-moyennes)
-        "loi de probabilité",     # loi de probabilité
-        "axe factoriel"     # axe factoriel
-    ]
-)
-
 if file is not None:
 
     try:
@@ -139,7 +126,6 @@ if file is not None:
             n_etalon=int(n_etalon),
             max_iter=int(max_iter),
             distance=distance_name,
-            kernel_type=kernel_type,   # 🔵 AJOUT
             seed=0
         )
 
@@ -165,25 +151,11 @@ if file is not None:
         st.write(f"U(L) = **{model.total_partition_quality_:.4f}**")
 
         # ---------- NOYAUX ----------
-        st.subheader("Noyaux")
-
-        for i, kernel in enumerate(model.L_):
-            st.write(f"Classe {i} — type : **{kernel['type']}**")
-
-            if kernel["type"] == "discrete":
-                coords = [tuple(int(c) for c in X[j]) for j in kernel["indices"]]
-                st.write(f"indices : {kernel['indices']} → coords : {coords}")
-
-            elif kernel["type"] == "centroid":
-                st.write(f"centre de gravité : {kernel['vector']}")
-
-            elif kernel["type"] == "gaussian":
-                st.write(f"moyenne : {kernel['mean']}")
-                st.write(f"covariance :\n{kernel['cov']}")
-
-            elif kernel["type"] == "factorial":
-                st.write(f"origine : {kernel['origin']}")
-                st.write(f"axe factoriel : {kernel['axis']}")
+        st.subheader("Étalons")
+        L = model.L_indices_
+        for i, idx_list in enumerate(L):
+            coords = [tuple(int(c) for c in X[j]) for j in idx_list]
+            st.write(f"Classe {i} → indices {idx_list} → coords {coords}")
 
         # ---------- VISUALISATION ----------
         labels = model.predict(X)
@@ -200,16 +172,16 @@ if file is not None:
         colors = [color_map[cls] for cls in labels]
         ax.scatter(X[:, 0], X[:, 1], c=colors, s=25, alpha=0.8)
 
-        # Étendons (cas discret uniquement)
-        if kernel_type == "discrete":
-            for idx_list in model.L_indices_:
-                if idx_list:
-                    pts = np.array([X[j] for j in idx_list])
-                    ax.scatter(
-                        pts[:, 0], pts[:, 1],
-                        marker="X", s=120,
-                        edgecolor="black", color="red"
-                    )
+
+        # Étendons
+        for idx_list in L:
+            if idx_list:
+                pts = np.array([X[j] for j in idx_list])
+                ax.scatter(
+                    pts[:, 0], pts[:, 1],
+                    marker="X", s=120,
+                    edgecolor="black", color="red"
+                )
 
         ax.set_title("Partition — Nuées Dynamiques")
         ax.set_xlabel("x")
@@ -231,9 +203,10 @@ if file is not None:
 
         ax.legend(handles=handles, title="Classes", loc="upper right", frameon=True)
 
+
         st.pyplot(fig)
 
-# ----------------------------------------------------------------------
+        # ----------------------------------------------------------------------
 # FOOTER PERMANENT DANS LA SIDEBAR
 # ----------------------------------------------------------------------
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -246,3 +219,5 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+
