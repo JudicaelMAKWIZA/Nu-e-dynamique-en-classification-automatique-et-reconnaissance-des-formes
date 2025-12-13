@@ -19,7 +19,7 @@ st.title("Nuées Dynamiques — Implémentation")
 
 
 st.markdown("""
-Basé sur l'article de DIDAY (1971) : LA MÉTHODE DES NUÉES DYNAMIQUES  
+Basé sur l'article de DIDAY (1971) : LA MÉTHODE DES NUÉES DYNAMIQUES  
 """)
 
 # ----------------------------------------------------------------------
@@ -88,8 +88,21 @@ st.header("2. Téléverser un dataset")
 file = st.file_uploader("Téléverser le dataset", type=["csv"])
 
 k = st.number_input("Nombre de classes k", 2, 10, 3)
-n_etalon = st.number_input("Nombre d’étalons par classe", 1, 10, 1)
 max_iter = st.number_input("Maximum d’itérations", 10, 500, 200)
+
+# MODIFICATION: Choix du type de noyau
+kernel_type = st.selectbox(
+    "Type de noyau ($A_i$)",
+    ["etalons", "centroide"]
+)
+
+# Gestion de n_etalon en fonction du type de noyau
+if kernel_type == "etalons":
+    n_etalon = st.number_input("Nombre d’étalons par classe", 1, 10, 1)
+else:
+    # Pour le centroïde, n_etalon est toujours 1 (conceptuellement), mais on le force à 1
+    # juste pour satisfaire NuesDynamiques.__init__.
+    n_etalon = 1
 
 # choix de la distance
 distance_name = st.selectbox(
@@ -123,12 +136,14 @@ if file is not None:
 
         model = NuesDynamiques(
             k=int(k),
-            n_etalon=int(n_etalon),
+            n_etalon=int(n_etalon), # N'est pris en compte que si kernel_type='etalons'
             max_iter=int(max_iter),
             distance=distance_name,
-            seed=0
+            seed=0,
+            kernel_type=kernel_type # PASSAGE DU PARAMÈTRE
         )
 
+        # On utilise model.fit(X) sans sample_weights, donc les masses mu sont = 1
         model.fit(X)
 
         # ---------- CONVERGENCE ----------
@@ -151,44 +166,55 @@ if file is not None:
         st.write(f"U(L) = **{model.total_partition_quality_:.4f}**")
 
         # ---------- NOYAUX ----------
-        st.subheader("Étalons")
-        L = model.L_indices_
-        for i, idx_list in enumerate(L):
-            coords = [tuple(int(c) for c in X[j]) for j in idx_list]
-            st.write(f"Classe {i} → indices {idx_list} → coords {coords}")
-
-        # ---------- VISUALISATION ----------
-        labels = model.predict(X)
-
+        st.subheader(f"Noyaux ($A_i$ - Type: {model.kernel_type})")
+        # MODIFICATION: Utilisation de L_kernels_ pour l'affichage
+        L = model.L_kernels_ 
+        
         fig, ax = plt.subplots(figsize=(6, 5))
 
+        # 1. Calculer les labels pour la couleur des points
+        labels = model.predict(X)
         classes_ids = np.unique(labels)
         cmap = plt.get_cmap("tab10")
-
-        # Dictionnaire : classe → couleur
         color_map = {cls: cmap(cls % 10) for cls in classes_ids}
 
         # Scatter cohérent : chaque point reçoit LA bonne couleur
         colors = [color_map[cls] for cls in labels]
         ax.scatter(X[:, 0], X[:, 1], c=colors, s=25, alpha=0.8)
 
-
-        # Étendons
-        for idx_list in L:
-            if idx_list:
+        # 2. Afficher les noyaux (Étalons ou Centroïdes)
+        for i, kernel in enumerate(L):
+            if kernel is None:
+                st.write(f"Classe {i} → Noyau vide")
+                continue
+                
+            if model.kernel_type == "etalons":
+                # Le noyau est une liste d'indices de points réels
+                idx_list = kernel
+                coords = [tuple(int(c) for c in X[j]) for j in idx_list]
+                st.write(f"Classe {i} → indices {idx_list} → coords {coords}")
+                
+                # Visualisation des étalons (marcheurs X)
                 pts = np.array([X[j] for j in idx_list])
+                ax.scatter(pts[:, 0], pts[:, 1], marker="X", s=120, edgecolor="black", color="red")
+                
+            else: # Centroide
+                # Le noyau est un vecteur
+                st.write(f"Classe {i} → centroïde {np.round(kernel, 4).tolist()}")
+                
+                # Visualisation des centroïdes (marcheurs X)
                 ax.scatter(
-                    pts[:, 0], pts[:, 1],
+                    kernel[0], kernel[1],
                     marker="X", s=120,
                     edgecolor="black", color="red"
                 )
 
-        ax.set_title("Partition — Nuées Dynamiques")
+        ax.set_title(f"Partition — Nuées Dynamiques ({kernel_type})")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
 
         # ------------------------------------------------------------------
-        #           🔥 AJOUT DE LA LÉGENDE IDENTIFIANT LES CLASSES
+        # AJOUT DE LA LÉGENDE IDENTIFIANT LES CLASSES
         # ------------------------------------------------------------------
         handles = []
         for cls in classes_ids:
@@ -206,7 +232,6 @@ if file is not None:
 
         st.pyplot(fig)
 
-        # ----------------------------------------------------------------------
 # FOOTER PERMANENT DANS LA SIDEBAR
 # ----------------------------------------------------------------------
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -219,5 +244,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-
