@@ -18,7 +18,7 @@ def euclidienne(x, y):
 
 def sebestyen(x, y, variances=None, eps=1e-12):
     """
-    Distance 'Sébéstyen' (standardisée) :
+    Distance 'Sébéstyen'  :
     d = sqrt( sum_i ( (x_i - y_i)^2 / s_i^2 ) )
     où s_i^2 est la variance de la dimension i (si fournie).
     Si variances is None -> comportement similaire à l'euclidienne.
