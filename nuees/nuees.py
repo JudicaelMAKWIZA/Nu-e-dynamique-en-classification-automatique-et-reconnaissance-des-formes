@@ -13,7 +13,6 @@ Nuées Dynamiques — implémentation.
 
 import numpy as np
 from .distances import euclidienne, sebestyen, chebychev, chi2
-# MODIFICATION: Ajout de D_point_to_vector pour le noyau centroïde
 from .r_function import R_idx, D_point_to_class_idx, D_point_to_set_idx, D_point_to_vector
 from collections import defaultdict
 
@@ -36,7 +35,7 @@ class NuesDynamiques:
         # attributs publics
         self.n_iter_ = None
         self.L_indices_ = None # Contient les indices (seulement si kernel_type='etalons')
-        self.L_kernels_ = None # Liste des noyaux (indices ou vecteurs)
+        self.L_kernels_ = None # Liste des représentations du noyau (indices ou vecteur)
         self.classes_ = None
         self.converged_ = False
         self.total_partition_quality_ = None
@@ -69,17 +68,16 @@ class NuesDynamiques:
     # -----------------------
     # Initialisation des noyaux L
     # -----------------------
+    # CORRECTION: Fonction _init_L_random ne dépend PLUS de self._X ni self._mu
     def _init_L_random(self, n_samples):
-        """Initialise L_indices_ (indices aléatoires) et L_kernels_ (noyaux)."""
+        """Initialise L_indices_ : pour chaque classe, choisir n_etalon indices aléatoires."""
         rng = np.random.RandomState(self.seed)
         L = []
         
         total_etalons = min(self.k * self.n_etalon, n_samples)
         
-        # Tirer tous les indices uniques
         all_random_indices = rng.choice(n_samples, size=total_etalons, replace=False)
         
-        # Répartir les indices entre les classes (E_i)
         for i in range(self.k):
             start = i * self.n_etalon
             end = (i + 1) * self.n_etalon
@@ -91,17 +89,8 @@ class NuesDynamiques:
                    pass
 
         self.L_indices_ = L
+        # self.L_kernels_ sera initialisé au début de fit()
         
-        # Initialisation de L_kernels_ en fonction du type de noyau
-        if self.kernel_type == "centroide":
-            # Le noyau initial est le centroïde des points initiaux
-            self.L_kernels_ = []
-            for indices in self.L_indices_:
-                centroid = self._calculate_centroide(self._X, indices, self._mu)
-                self.L_kernels_.append(centroid)
-        else: # 'etalons'
-            # L_kernels_ est la même chose que L_indices_ pour le type étalons
-            self.L_kernels_ = self.L_indices_
 
     # -----------------------
     # Utilitaire pour Sebestyen
@@ -120,7 +109,7 @@ class NuesDynamiques:
     # -----------------------
     def _calculate_centroide(self, X, indices, mu):
         """Calcule le centre de gravité (moyenne PONDÉRÉE) des points d'une classe."""
-        if not indices:
+        if not indices or X is None or mu is None:
             return None
         
         indices_arr = np.asarray(indices, dtype=int)
@@ -130,7 +119,8 @@ class NuesDynamiques:
         
         total_mass = np.sum(mu_class)
         if total_mass == 0:
-             return np.mean(X_class, axis=0)
+             # Si masse totale nulle, retourne la moyenne non pondérée
+             return np.mean(X_class, axis=0) if X_class.size > 0 else None
         
         # Calcul de la moyenne pondérée (centroïde)
         centroid = np.sum(X_class * mu_class[:, np.newaxis], axis=0) / total_mass
@@ -160,7 +150,8 @@ class NuesDynamiques:
             members = new_classes[i]
             
             if len(members) < self.n_etalon:
-                new_L_indices.append(list(old_L_indices[i])) 
+                # Si la classe est trop petite, garder l'ancien noyau
+                new_L_indices.append(list(old_L_indices[i]) if i < len(old_L_indices) else [])
                 continue
 
             score_list = []
@@ -202,7 +193,7 @@ class NuesDynamiques:
 
         # --- GESTION ET STOCKAGE DES MASSES (mu_i) ---
         if sample_weights is None:
-            self.mu_ = np.ones(n_samples, dtype=float)
+            self.mu_ = np.ones(n_samples, dtype=float) # Masse par défaut = 1
         else:
             self.mu_ = np.asarray(sample_weights, dtype=float)
             if self.mu_.shape != (n_samples,):
@@ -212,7 +203,20 @@ class NuesDynamiques:
         self._mu = self.mu_
         # --------------------------------------------
 
-        self._init_L_random(n_samples) # <-- DOIT ÊTRE APPELÉ APRÈS self._X et self._mu
+        # --- INITIALISATION DU NOYAU L (Indices et Représentation) ---
+        self._init_L_random(n_samples) # Initialise self.L_indices_ avec des indices aléatoires
+        
+        # Initialisation de L_kernels_ (Représentation du noyau)
+        if self.kernel_type == "centroide":
+            self.L_kernels_ = []
+            for indices in self.L_indices_:
+                # Calculer le centroïde des points initiaux (maintenant que self._X et self._mu sont définis)
+                centroid = self._calculate_centroide(self._X, indices, self._mu)
+                self.L_kernels_.append(centroid)
+        else: # 'etalons'
+            self.L_kernels_ = self.L_indices_
+        # -----------------------------------------------------------------
+
         self.classes_ = {i: [] for i in range(self.k)}
         distance_fn = self._distance_map[self.distance]
         self.n_iter_ = 0
@@ -233,9 +237,10 @@ class NuesDynamiques:
                     
                     dist_kwargs = self._get_distance_kwargs(X, self.classes_.get(i, []))
                         
-                    # MODIFICATION: Affectation en fonction du type de noyau
+                    # Affectation en fonction du type de noyau
                     if self.kernel_type == "etalons":
                          # Utilise la fonction R_idx (critère d'agrégation/écartement)
+                         # NOTE: L_indices_ contient les indices, L_kernels_ contient aussi les indices
                          score = R_idx(
                             x, i, self.L_indices_, self.classes_, X, self.mu_, 
                             distance_fn, distance_kwargs=dist_kwargs
@@ -262,8 +267,9 @@ class NuesDynamiques:
 
             # --- Étape 3 : Mise à jour des noyaux L ---
             # Appel à la fonction appropriée (définie dans _kernel_type_map)
+            # L_kernels_ est passé pour les centroïdes (old_L_kernels), L_indices_ est passé pour les étalons (old_L_indices)
             new_L_kernels, new_L_indices = self._kernel_type_map[self.kernel_type](
-                X, new_classes, self.L_kernels_ # old_L_kernels pour le centroïde / old_L_indices pour les étalons (via L_kernels_)
+                X, new_classes, self.L_kernels_ if self.kernel_type == "centroide" else self.L_indices_
             )
 
 
@@ -274,7 +280,10 @@ class NuesDynamiques:
             for old, new in zip(old_L_representation, new_L_representation):
                 if self.kernel_type == "etalons":
                     # Pour les étalons (indices), on compare l'ensemble des indices
-                    if set(old) != set(new):
+                    # Gérer les cas où un noyau n'était pas un ensemble et est devenu un vecteur ou inversement
+                    old_set = set(old) if isinstance(old, list) else set()
+                    new_set = set(new) if isinstance(new, list) else set()
+                    if old_set != new_set:
                         same = False
                         break
                 else:
@@ -304,7 +313,7 @@ class NuesDynamiques:
         return self
         
     # -----------------------
-    # Score et Métriques
+    # Score et Métriques (Reste inchangé)
     # -----------------------
     def _score_partition(self, X):
         """
@@ -320,7 +329,6 @@ class NuesDynamiques:
             members_indices = self.classes_.get(i, [])
             kernel_i = self.L_kernels_[i] # Noyau (indices ou vecteur)
 
-            # Vérification si la classe/noyau est valide
             if not members_indices or kernel_i is None or (self.kernel_type == "etalons" and not kernel_i):
                 class_homogeneity[i] = 0.0
                 continue
@@ -333,13 +341,10 @@ class NuesDynamiques:
                 mu_x = self.mu_[idx]
 
                 if self.kernel_type == "etalons":
-                    # D(x, E_i) est la somme des distances (Diday's definition)
                     D_xEi = D_point_to_set_idx(x, X, kernel_i, distance_fn, dist_kwargs)
                 else: # Centroide
-                    # D(x, G_i) est la distance au centroïde
                     D_xEi = D_point_to_vector(x, kernel_i, distance_fn, dist_kwargs)
 
-                # Le critère total est la somme PONDÉRÉE par la masse du point
                 sum_class_D_weighted += D_xEi * mu_x
                 
             total_mass_class = np.sum(self.mu_[members_indices])
@@ -356,7 +361,6 @@ class NuesDynamiques:
         similarity_matrix = np.zeros((n_samples, self.k))
         distance_fn = self._distance_map[self.distance]
 
-        # Précalcul des variances (pour Sebestyen)
         variances_by_class = {}
         for i in range(self.k):
             members = self.classes_.get(i, [])
@@ -369,31 +373,30 @@ class NuesDynamiques:
         for idx in range(n_samples):
             x = X[idx]
             for j in range(self.k):
-                kernel_j = self.L_kernels_[j] # Noyau (indices ou vecteur)
+                kernel_j = self.L_kernels_[j] 
                 
                 dist_kwargs = {}
                 if self.distance == "sebestyen" and variances_by_class[j] is not None:
                     dist_kwargs = {"variances": variances_by_class[j]}
                 
                 if self.kernel_type == "etalons":
-                    # D(x, E_j) est la somme des distances
                     similarity_matrix[idx, j] = D_point_to_set_idx(x, self._X, kernel_j, distance_fn, dist_kwargs)
                 else: # Centroide
-                    # D(x, G_j) est la distance au vecteur
                     similarity_matrix[idx, j] = D_point_to_vector(x, kernel_j, distance_fn, dist_kwargs)
 
         return similarity_matrix
 
     # -----------------------
-    # Predict
+    # Predict (Reste inchangé)
     # -----------------------
     def predict(self, X):
         """
         Retourne pour chaque point l'indice de la classe (0..k-1) qui minimise le critère d'affectation R ou D.
         """
         X = np.asarray(X, dtype=float)
-        if self.L_indices_ is None or self._X is None or self._mu is None:
-            raise ValueError("Appeler fit(X) avant predict()")
+        if self.L_kernels_ is None or self._X is None or self._mu is None:
+            # Vérifier L_kernels_ au lieu de L_indices_ pour la flexibilité
+            raise ValueError("Appeler fit(X) avant predict()") 
         n_samples = X.shape[0]
         labels = np.empty(n_samples, dtype=int)
         distance_fn = self._distance_map[self.distance]
@@ -408,13 +411,13 @@ class NuesDynamiques:
                 dist_kwargs = self._get_distance_kwargs(self._X, members_prev)
 
                 if self.kernel_type == "etalons":
-                    # Utiliser R_idx (critère d'agrégation/écartement)
+                    # Utiliser R_idx
                     score = R_idx(
                         x, i, self.L_indices_, self.classes_, self._X, self._mu, 
                         distance_fn, distance_kwargs=dist_kwargs
                     )
                 else: # Centroide
-                    # Utiliser D(x, G_i) pure (critère k-means)
+                    # Utiliser D(x, G_i) pure
                     Gi = self.L_kernels_[i]
                     if Gi is not None:
                          score = D_point_to_vector(
