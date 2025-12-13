@@ -29,26 +29,27 @@ def _safe_cov_inv(*args, **kwargs):
 class NuesDynamiques:
     def __init__(
         self,
-        k=3,
+        k,
         n_etalon=1,
-        max_iter=200,
+        max_iter=100,
         distance="euclidienne",
         seed=None,
-        kernel_type="discrete"  # 🔵 AJOUT
+        kernel_type="discrete" 
     ):
-        self.k = int(k)
-        self.n_etalon = int(n_etalon)
-        self.max_iter = int(max_iter)
-        self.distance = distance.lower()
+        self.k = k
+        self.n_etalon = n_etalon
+        self.max_iter = max_iter
+        self.distance = distance
         self.seed = seed
-
-        # 🔵 AJOUT : type de noyau
         self.kernel_type = kernel_type
-        if self.kernel_type not in ["discrete", "centroid", "gaussian", "factorial"]:
-            raise ValueError(
-                "kernel_type inconnu. Choix possibles : "
-                "discrete, centroid, gaussian, factorial"
-            )
+
+        if self.kernel_type != "discrete":
+            raise NotImplementedError(
+            "Seul le noyau discret (ensemble d'individus) est implémenté actuellement, "
+            "conformément à l'article de Diday (1971). "
+            "Les autres types de noyaux sont proposés dans l'interface mais "
+            "non encore implémentés dans l'algorithme."
+        )
 
         # attributs publics
         self.n_iter_ = None

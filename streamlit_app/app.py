@@ -101,12 +101,12 @@ distance_name = st.selectbox(
 # 🔵 AJOUT : choix du type de noyau
 # ----------------------------------------------------------------------
 kernel_type = st.selectbox(
-    "Type de noyau (au sens de Diday)",
+    "Type de noyau",
     [
         "discrete",     # ensemble d’individus (cas historique)
-        "centroid",     # centre de gravité (k-moyennes)
-        "gaussian",     # loi de probabilité
-        "factorial"     # axe factoriel
+        "centroïde",     # centre de gravité (k-moyennes)
+        "loi de probabilité",     # loi de probabilité
+        "axe factoriel"     # axe factoriel
     ]
 )
 
