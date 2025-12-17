@@ -1,6 +1,6 @@
 # Nuee-dynamique-en-classification-automatique-et-reconnaissance-des-formes
 
-Cette application propose une implémentation fidèle de la **méthode des Nuées Dynamiques**, introduite par **Edmond Diday en 1971**.
+Cette application propose une implémentation de la **méthode des Nuées Dynamiques**, introduite par **Edmond Diday en 1971**.
 
 ## Structure du projet
 ```
